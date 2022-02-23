@@ -1,4 +1,3 @@
-# aave-v2-megadashboard
 ## Introduction
 Why MEGA? The purpose of this project is to analyze all the key aspects of the AAVE project. To do this, the following areas were highlighted:
 
