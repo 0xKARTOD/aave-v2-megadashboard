@@ -1,0 +1,69 @@
+WITH borrows AS 
+(
+SELECT
+date_trunc('day', evt_block_time) as day,
+t.symbol as token,
+CASE WHEN _reserve = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE _reserve END as contract_address,
+sum("_amount"/10^decimals) as borrow_amount
+FROM aave."LendingPool_evt_Borrow" borrows
+LEFT JOIN erc20."tokens" t ON borrows."_reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+,
+
+flashloan AS
+(
+SELECT
+date_trunc('day', evt_block_time) as day,
+t.symbol as token,
+CASE WHEN _reserve = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE _reserve END as contract_address,
+sum("_amount"/10^decimals) as flash_amount
+FROM aave."LendingPool_evt_FlashLoan" flashloans
+LEFT JOIN erc20."tokens" t ON flashloans."_reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+,
+
+
+p AS 
+(
+SELECT
+* 
+FROM prices.usd
+),
+
+Total_bor AS (
+SELECT 
+day, 
+sum(borrow_amount*price) As borrow_volume
+from borrows
+
+LEFT JOIN p ON borrows.day = p.minute
+AND p.contract_address = borrows.contract_address
+
+GROUP BY day 
+ORDER BY day desc
+),
+
+Total_flash AS (
+SELECT 
+day, 
+sum(flash_amount*price) As flash_volume
+from flashloan
+
+LEFT JOIN p ON flashloan.day = p.minute
+AND p.contract_address = flashloan.contract_address
+
+GROUP BY day 
+ORDER BY day desc
+)
+
+
+SELECT
+    Total_bor.day,
+    borrow_volume,
+    flash_volume
+FROM Total_bor
+LEFT JOIN Total_flash ON Total_flash.day = Total_bor.day

@@ -1,0 +1,7 @@
+SELECT
+    extract(ISODOW from block_time) as Day_of_Week,
+    AVG(gas_price)/1000000000 as avg_gas_price
+FROM ethereum."transactions"
+WHERE block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY Day_of_Week
+Order by Day_of_Week desc

@@ -1,0 +1,14 @@
+SELECT
+        t.symbol AS token,
+        coalesce(sum(add_amt / 10^t.decimals*p.price),0) AS add_usd
+FROM
+(SELECT  evt_block_time AS block_time,
+       _amount AS add_amt,
+       CASE WHEN _reserve = '\xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' --Use WETH instead of Aave "mock" address
+       ELSE _reserve END AS "add_address"
+FROM aave."LendingPool_evt_Deposit" 
+where evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days') add
+LEFT JOIN erc20.tokens t ON t.contract_address = add.add_address
+LEFT JOIN prices."usd" p ON p.minute = date_trunc('minute',block_time)
+AND p.contract_address = add.add_address
+GROUP BY t.symbol

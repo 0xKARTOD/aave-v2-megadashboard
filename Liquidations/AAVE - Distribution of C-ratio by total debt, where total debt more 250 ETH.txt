@@ -1,0 +1,20 @@
+WITH DB AS ( 
+SELECT 
+    date_trunc('day', "call_block_time") as day,
+    "user",
+    "output_totalDebtETH" /1e18 as debt,
+    "output_totalDebtETH"/ "output_totalCollateralETH"  * 100 AS "TCR"
+FROM aave_v2."LendingPool_call_getUserAccountData"
+WHERE "output_totalCollateralETH"<>0
+)
+
+
+SELECT 
+    "user" AS user,
+    avg(debt)*avg(price) AS Debt,
+    avg("TCR") AS C_ratio
+FROM DB  
+LEFT JOIN prices.usd p ON p.symbol = 'WETH' AND date_trunc('day', p.minute) = date_trunc('day', now())
+WHERE day IN (SELECT max(day) OVER (PARTITION BY "user") FROM DB) AND debt > 250
+GROUP BY 1
+ORDER BY C_ratio asc

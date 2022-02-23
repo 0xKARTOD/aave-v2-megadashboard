@@ -1,0 +1,31 @@
+WITH deposits AS 
+(
+SELECT
+date_trunc('day', evt_block_time) as day,
+t.symbol as token,
+CASE WHEN _reserve = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE _reserve END as contract_address,
+sum("_amount"/10^decimals) as amount
+FROM aave."LendingPool_evt_Deposit" deposits
+LEFT JOIN erc20."tokens" t ON deposits."_reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+,
+
+p AS 
+(
+SELECT
+* 
+FROM prices.usd
+)
+
+SELECT 
+day, 
+token,
+amount,
+price,
+amount*price As USDvalue
+from deposits
+LEFT JOIN p ON deposits.day = p.minute
+AND p.contract_address = deposits.contract_address
+ORDER BY day desc 

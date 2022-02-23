@@ -1,0 +1,66 @@
+WITH liquidations AS 
+(
+SELECT
+    "user" AS "user",
+    date_trunc('day', evt_block_time) as day,
+    t.symbol as token,
+    CASE 
+        WHEN "collateralAsset" = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
+        WHEN "collateralAsset" = '\x8798249c2e607446efb7ad49ec89dd1865ff4272' THEN '\x6b3595068778dd592e39a122f4f5a5cf09c90fe2' 
+        ELSE "collateralAsset" 
+    END as contract_address,
+    count("evt_tx_hash") AS count_tx
+FROM aave_v2."LendingPool_evt_LiquidationCall" liquidations 
+LEFT JOIN erc20."tokens" t ON liquidations."collateralAsset" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3,4
+)
+,
+
+-------------------------------------
+DB AS ( 
+SELECT 
+    date_trunc('day', "call_block_time") as day,
+    aave."user",
+     "output_totalDebtETH"/ "output_totalCollateralETH"*100 AS "TCR"
+FROM aave_v2."LendingPool_call_getUserAccountData" aave
+LEFT JOIN liquidations t ON t."user" = aave."user"
+WHERE "output_totalCollateralETH"<>0
+),
+----------------------------------------------------------
+
+TCR_per_user AS (
+    SELECT
+        DB."user",
+        avg("TCR") AS "TCR"
+    FROM DB 
+    LEFT JOIN liquidations ON DB.day <= liquidations.day
+    WHERE DB.day IN (SELECT max(DB.day) OVER (PARTITION BY DB."user") FROM DB)
+    GROUP BY DB."user"
+)
+
+SELECT 
+    FLOOR("TCR"),
+    --CASE 
+    --    WHEN "TCR" < 0.20 THEN '20%'
+    --    WHEN "TCR" >= 0.20 AND "TCR" < 0.30 THEN '20-30%'
+    --    WHEN "TCR" >= 0.30 AND "TCR" < 0.40 THEN '30-40%'
+    --    WHEN "TCR" >= 0.40 AND "TCR" < 0.50 THEN '40-50%'
+    --    WHEN "TCR" >= 0.5 AND "TCR" < 0.6 THEN '50-60%'
+    --    WHEN "TCR" >= 0.6 AND "TCR" < 0.65 THEN '60-65%'
+    --    WHEN "TCR" >= 0.65 AND "TCR" < 0.7 THEN '65-70%'
+    --    WHEN "TCR" >= 0.7 AND "TCR" < 0.8 THEN '70-80%'
+    --    WHEN "TCR" >= 0.8 AND "TCR" < 0.9 THEN '80-90%'
+    --    WHEN "TCR" >= 0.9 AND "TCR" < 1 THEN '90-100%'
+    --    WHEN "TCR" >= 1 THEN '>100%'
+    --END AS TCR_dist,
+    sum(count_tx) AS liq_count
+
+from liquidations
+
+
+LEFT JOIN TCR_per_user D ON D."user" = liquidations."user"
+WHERE "TCR">0
+
+GROUP BY 1
+ORDER BY 1 desc

@@ -1,0 +1,11 @@
+SELECT 
+"voter" AS Voter,
+CASE 
+WHEN "support" = true THEN 'Yae'
+WHEN "support" = false THEN 'Nay'
+END as YAE_NAY,
+sum("votingPower") / 1e18 as votingPower
+FROM aave."AaveGovernanceV2_evt_VoteEmitted"
+GROUP BY Voter,YAE_NAY
+ORDER BY votingPower desc
+LIMIT 100

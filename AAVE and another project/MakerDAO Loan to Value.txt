@@ -1,0 +1,101 @@
+WITH borrows AS (
+    
+    SELECT  day,
+            project,
+            token_symbol,
+            token_address, 
+            sum(amount) AS amount -- Net borrow per day
+    FROM
+    
+    (
+        SELECT  date_trunc('day', block_time) AS day,
+                project,
+                asset_address AS token_address,
+                asset_symbol AS token_symbol,
+                token_amount AS amount
+        FROM lending."borrow"
+        WHERE project = 'MakerDAO'
+
+        
+        UNION ALL
+        
+        SELECT  date_trunc('day', block_time) AS day,
+                project,
+                asset_address AS token_address,
+                asset_symbol AS token_symbol,
+                -token_amount AS amount
+        FROM lending."repay"
+        WHERE project = 'MakerDAO'
+
+    ) b
+   GROUP BY 1, 2, 3, 4
+   )
+
+, outstanding_token_amount AS (
+    SELECT  day,
+            project,
+            token_address,
+            SUM(amount) OVER (PARTITION BY project, token_address ORDER BY day) AS outstanding
+    FROM borrows
+    WHERE project = 'MakerDAO'
+    )
+    
+, per_day AS
+(
+    SELECT  date_trunc('day', block_time) AS day,
+            project,
+            asset_address,
+            SUM(token_amount) AS collateral_change
+    FROM lending."collateral_change"
+    GROUP BY 1, 2, 3
+)
+
+, daily_token_balance AS (
+    SELECT  day,
+            project,
+            asset_address,
+            SUM(collateral_change) OVER (PARTITION BY project, asset_address ORDER BY day) AS collateral_locked
+    FROM per_day
+)
+
+, usd_prices AS (
+    SELECT  date_trunc('day', minute) AS day,
+            contract_address AS asset_address,
+            AVG(price) AS price
+    FROM prices.usd 
+    WHERE contract_address IN (SELECT asset_address FROM daily_token_balance)
+    AND minute >= DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+    GROUP BY 1,2
+)
+, all_outstanding as 
+   (
+SELECT  b.day,
+        project,
+        SUM(outstanding*p.price) AS outstanding_usd_value
+FROM outstanding_token_amount b
+LEFT JOIN usd_prices p ON p.day = b.day AND p.asset_address = b.token_address
+WHERE b.day >= DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+AND project = 'MakerDAO'
+GROUP BY 1, 2
+)
+
+, all_collateral as (
+SELECT  b.day,
+        project,
+        SUM(collateral_locked*p.price) AS locked_usd_value
+FROM        daily_token_balance b
+LEFT JOIN   usd_prices p ON p.day = b.day AND p.asset_address = b.asset_address
+WHERE b.day >= DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+AND project = 'MakerDAO'
+GROUP BY 1, 2
+)
+
+Select  
+o.day, 
+o.project, 
+outstanding_usd_value / locked_usd_value as ltv,
+outstanding_usd_value, 
+locked_usd_value
+
+from all_outstanding o
+left join all_collateral c on o.day = c.day

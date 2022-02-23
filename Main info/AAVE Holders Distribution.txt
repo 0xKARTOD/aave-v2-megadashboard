@@ -1,0 +1,76 @@
+WITH temp_table AS (
+SELECT 
+    evt_block_time,
+    tr."from" AS address,
+    -tr.value AS amount,
+    contract_address
+FROM erc20."ERC20_evt_Transfer" tr
+WHERE contract_address = '\x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9'
+
+UNION ALL
+
+SELECT
+    evt_block_time,
+    tr."to" AS address,
+    tr.value AS amount,
+    contract_address
+FROM erc20."ERC20_evt_Transfer" tr
+WHERE contract_address = '\x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9'
+), 
+
+temp_table2 AS (
+SELECT
+    address,
+    SUM(amount/10^18) AS balance
+FROM temp_table tr
+LEFT JOIN erc20.tokens tok ON tr.contract_address = tok.contract_address
+GROUP BY 1
+ORDER BY 2 DESC
+),
+
+data as (
+SELECT
+    balance
+FROM temp_table2
+WHERE balance > 0
+ORDER BY balance DESC
+),
+
+percentilesALT as (select 1/(1+exp(-1.70096*(4*(2*generate_series(.01,1,.01)-1))))::FLOAT as ntile union select 1) ,
+
+binning as ( --find percentiles
+    select percentile_disc(ntile) within group (order by balance) as ntile, ntile as percentile
+    from data, percentilesalt
+    group by ntile
+),
+
+ranges as (
+    select ntile,
+        numrange( (lag(ntile)over (order by ntile))::numeric, ntile::numeric, '(]') as ranges --turn percentiles into ranges
+        ,percentile
+    from binning
+),
+
+median AS (
+SELECT
+    percentile_cont(.5) WITHIN GROUP (ORDER BY balance) AS MedianCont
+FROM data
+),
+
+
+final_table AS (
+select '('||coalesce(round(lower(ranges),3),0.1)::text|| ' - ' ||round(upper(Ranges),3)::text|| ') AAVE' as wallet_Size,
+    ntile as walletsizeupperlimit,
+    percentile as percentile,
+    count(*) as "# of wallets"
+from data
+join ranges on ranges @>balance::numeric
+group by 1,2,3
+order by ntile
+)
+
+SELECT
+    wallet_Size,
+    "# of wallets",
+    MedianCont
+FROM final_table, median

@@ -1,0 +1,37 @@
+WITH AAVE_price AS (
+ SELECT  
+    date_trunc('{{Time interval}}', minute) as time, 
+    price as AAVE_prices
+FROM  prices.usd
+WHERE  symbol = 'AAVE'
+AND  minute >= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+ORDER BY 1 desc 
+),
+
+Token_price AS (
+ SELECT  date_trunc('{{Time interval}}', minute) as time, price as ETH_price
+    FROM  prices.usd
+   WHERE  symbol = 'WETH'
+     AND  minute >= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+ORDER BY 1 desc 
+),
+
+AVG_prices AS (
+SELECT 
+    A.time,
+    AVG(AAVE_prices) AS AAVE_price,
+    AVG(ETH_price) AS WETH_price
+FROM AAVE_price A
+LEFT JOIN Token_price E ON E.time = A.time
+GROUP BY A.time
+ORDER BY A.time  desc
+)
+
+SELECT
+    time,
+    AAVE_price,
+    WETH_price,
+    AVG(AAVE_price) OVER (ORDER BY time ROWS BETWEEN 30 PRECEDING AND 0 FOLLOWING) AS "30d MA AAVE price",
+    AVG(AAVE_price) OVER (ORDER BY time ROWS BETWEEN 14 PRECEDING AND 0 FOLLOWING) AS "14d MA AAVE price"
+FROM AVG_prices
+ORDER BY time desc

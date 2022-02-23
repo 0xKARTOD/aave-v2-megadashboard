@@ -1,0 +1,7 @@
+SELECT
+    date_part('hour',block_time) AS dhour,
+    AVG(gas_price)/1000000000 as avg_gas_price
+FROM ethereum."transactions"
+WHERE block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY dhour
+Order by dhour desc

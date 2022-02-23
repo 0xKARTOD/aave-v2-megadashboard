@@ -1,0 +1,133 @@
+WITH p AS (
+    SELECT date_trunc('day', minute) as dt, 
+        symbol, 
+        avg(price) as price 
+    FROM prices."usd"
+    WHERE symbol = 'AAVE'
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
+),
+
+user_v1 AS
+  (
+  SELECT 
+        date_trunc('day',evt_block_time) AS dt,
+        _user AS user_address
+        
+   FROM aave."LendingPool_evt_Deposit"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_Borrow"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _target AS user_address
+   FROM aave."LendingPool_evt_FlashLoan"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _liquidator AS user_address
+   FROM aave."LendingPool_evt_LiquidationCall"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_OriginationFeeLiquidated"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_RebalanceStableBorrowRate"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_RedeemUnderlying"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_Repay"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_ReserveUsedAsCollateralDisabled"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_ReserveUsedAsCollateralEnabled"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                _user AS user_address
+   FROM aave."LendingPool_evt_Swap"
+   WHERE date(evt_block_time)>='6/1/2020'),
+     user_v2 AS
+  (SELECT date_trunc('day',evt_block_time) AS dt,
+          aave_v2."LendingPool_evt_Deposit".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_Deposit"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_Borrow".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_Borrow"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_FlashLoan".target AS user_address_v2
+   FROM aave_v2."LendingPool_evt_FlashLoan"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_LiquidationCall".liquidator AS user_address_v2
+   FROM aave_v2."LendingPool_evt_LiquidationCall"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_RebalanceStableBorrowRate".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_RebalanceStableBorrowRate"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_Repay".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_Repay"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_ReserveUsedAsCollateralDisabled".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_ReserveUsedAsCollateralDisabled"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_ReserveUsedAsCollateralEnabled".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_ReserveUsedAsCollateralEnabled"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_Swap".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_Swap"
+   WHERE date(evt_block_time)>='6/1/2020'
+   UNION SELECT date_trunc('day',evt_block_time) AS dt,
+                aave_v2."LendingPool_evt_Withdraw".user AS user_address_v2
+   FROM aave_v2."LendingPool_evt_Withdraw"
+   WHERE date(evt_block_time)>='6/1/2020'
+   ),
+user_all AS
+    (
+    SELECT 
+        dt,
+        user_address
+    FROM user_v1
+    UNION
+    SELECT 
+        dt,
+        user_address_v2 AS user_address
+    FROM user_v2
+    ),
+user_all_min_date AS
+    (
+    SELECT user_address, min(dt) as min_dt
+    FROM user_all
+    GROUP BY user_address
+    ),
+temp AS(  
+   SELECT min_dt, count(distinct user_address)
+   FROM user_all_min_date
+   GROUP BY min_dt
+   ORDER BY min_dt desc
+   )
+   
+   
+SELECT 
+    min_dt, 
+    count, 
+    price,
+    sum(count) OVER (ORDER BY min_dt) AS cumulative_count 
+    FROM temp   
+    LEFT JOIN p ON min_dt = p.dt

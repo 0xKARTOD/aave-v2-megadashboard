@@ -1,0 +1,5 @@
+SELECT round("output_healthFactor" / 1e18,1) as health_factor,
+        count(distinct "user") as user_cnt
+FROM aave_v2."LendingPool_call_getUserAccountData"
+WHERE round("output_healthFactor" / 1e18,1) <100
+GROUP BY round("output_healthFactor" / 1e18,1)

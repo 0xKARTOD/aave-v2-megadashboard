@@ -1,0 +1,98 @@
+WITH prices AS (
+    SELECT
+        p.contract_address
+        ,p.symbol
+        ,p.price
+        ,p.decimals
+    FROM prices."usd" p
+    JOIN (
+      SELECT
+        contract_address
+        ,MAX(minute) AS minute
+      FROM prices."usd"
+      WHERE minute >= localtimestamp - interval '1 hour'
+      GROUP BY 1
+    ) x ON p.contract_address = x.contract_address AND p.minute = x.minute
+)
+
+,deposits AS (
+  SELECT 
+    day
+    ,token
+    ,SUM(amt) OVER(PARTITION BY token ORDER BY day) AS amt 
+  FROM (
+    SELECT 
+      date_trunc('day', evt_block_time) as day
+      ,reserve token
+      ,SUM(amount) amt
+    FROM aave_v2."LendingPool_evt_Deposit" 
+    GROUP BY 1,2
+  ) x
+)
+
+,withdrawals AS (
+  SELECT 
+    day
+    ,token
+    ,SUM(amt) OVER(PARTITION BY token ORDER BY day) AS amt 
+  FROM (
+    SELECT 
+      date_trunc('day', evt_block_time) as day
+      ,reserve token
+      ,SUM(amount) amt
+    FROM aave_v2."LendingPool_evt_Withdraw" 
+    GROUP BY 1,2
+  ) x
+)
+
+,borrows AS (
+  SELECT 
+    day
+    ,token
+    ,SUM(amt) OVER(PARTITION BY token ORDER BY day) AS amt 
+  FROM (
+    SELECT 
+      date_trunc('day', evt_block_time) as day
+      ,reserve token
+      ,SUM(amount) amt
+    FROM aave_v2."LendingPool_evt_Borrow" 
+    GROUP BY 1,2
+  ) x
+)
+
+,repays AS (
+  SELECT 
+    day
+    ,token
+    ,SUM(amt) OVER(PARTITION BY token ORDER BY day) AS amt 
+  FROM (
+    SELECT 
+      date_trunc('day', evt_block_time) as day
+      ,reserve token
+      ,SUM(amount) amt
+    FROM aave_v2."LendingPool_evt_Repay" 
+    GROUP BY 1,2
+  ) x
+)
+
+SELECT
+  day
+  ,symbol
+  ,usd_balance
+  ,usd_borrows
+  ,usd_borrows/usd_balance as utilization_rate
+FROM (
+  SELECT
+    d.day
+    ,p.symbol
+    ,((d.amt - w.amt) / (10 ^ p.decimals)) * p.price AS usd_balance
+    ,((b.amt - r.amt) / (10 ^ p.decimals)) * p.price AS usd_borrows
+  FROM deposits d
+  JOIN prices p ON d.token = p.contract_address
+  LEFT JOIN withdrawals w ON d.day = w.day AND d.token = w.token
+  LEFT JOIN borrows b ON d.day = b.day AND d.token = b.token
+  LEFT JOIN repays r ON d.day = r.day AND d.token = r.token
+
+  WHERE p.symbol = '{{Token Symbol}}'
+  AND d.day > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+) x

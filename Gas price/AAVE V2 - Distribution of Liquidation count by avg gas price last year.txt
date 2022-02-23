@@ -1,0 +1,44 @@
+With Gas_price AS (
+SELECT 
+    "hash" as tx_hash, 
+    gas_price/1000000000 as avg_gas_price
+FROM ethereum."transactions"
+WHERE block_time > DATE_TRUNC('day',now()) - interval '365 days'
+),
+
+liquidations AS 
+(
+SELECT
+    evt_block_time,
+    t.symbol as token,
+    CASE WHEN "collateralAsset" = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE "collateralAsset" END as contract_address,
+    "evt_tx_hash"
+FROM aave_v2."LendingPool_evt_LiquidationCall" liquidations 
+LEFT JOIN erc20."tokens" t ON liquidations."collateralAsset" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '365 days'
+)
+
+
+SELECT 
+    CASE 
+        WHEN avg_gas_price < 50 THEN '0-50 Gwei'
+        WHEN avg_gas_price >= 50 AND avg_gas_price < 75 THEN '050-75 Gwei'
+        WHEN avg_gas_price >= 75 AND avg_gas_price < 100 THEN '075-100 Gwei'
+        WHEN avg_gas_price >= 100 AND avg_gas_price < 125 THEN '100-125 Gwei'
+        WHEN avg_gas_price >= 125 AND avg_gas_price < 150 THEN '125-150 Gwei'
+        WHEN avg_gas_price >= 150 AND avg_gas_price < 200 THEN '150-200 Gwei'
+        WHEN avg_gas_price >= 200 AND avg_gas_price < 250 THEN '200-250 Gwei'
+        WHEN avg_gas_price >= 250 AND avg_gas_price < 300 THEN '250-300 Gwei'
+        WHEN avg_gas_price >= 300 AND avg_gas_price < 350 THEN '300-350 Gwei'
+        WHEN avg_gas_price >= 350 AND avg_gas_price < 400 THEN '350-400 Gwei'
+        WHEN avg_gas_price >= 400 AND avg_gas_price < 450 THEN '400-450 Gwei'
+        WHEN avg_gas_price >= 450 AND avg_gas_price < 500 THEN '450-500 Gwei'
+        WHEN avg_gas_price >= 500 THEN '>500 Gwei'
+    END AS avg_gas_price_dist,
+    count("evt_tx_hash") AS tv_count
+from liquidations
+
+LEFT JOIN Gas_price g ON g.tx_hash = liquidations."evt_tx_hash"
+
+GROUP BY avg_gas_price_dist
+ORDER BY avg_gas_price_dist desc

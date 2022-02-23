@@ -1,0 +1,23 @@
+WITH DB AS (
+SELECT 
+     date_trunc('day', "call_block_time") as day,
+     "user",
+     "output_totalDebtETH"/ "output_totalCollateralETH"*100 AS "TCR"
+FROM aave_v2."LendingPool_call_getUserAccountData" aave
+WHERE "output_totalCollateralETH"<>0
+),
+
+TCR_per_user AS (
+    SELECT
+        "user",
+        avg("TCR") AS "TCR"
+    FROM DB 
+    WHERE day IN (SELECT max(day) OVER (PARTITION BY "user") FROM DB)
+    GROUP BY "user"
+)
+
+SELECT 
+    FLOOR("TCR"),
+    count("user")
+FROM TCR_per_user
+GROUP BY 1

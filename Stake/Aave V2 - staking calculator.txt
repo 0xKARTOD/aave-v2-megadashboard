@@ -1,0 +1,53 @@
+WITH txns AS (
+    SELECT  evt_block_time,
+            SUM(value/1e18) as aave
+    FROM erc20."ERC20_evt_Transfer" f
+    WHERE f.contract_address = '\x4da27a545c0c5b758a6ba100e3a049001de870f5'
+        AND f.from = '\x0000000000000000000000000000000000000000'
+    GROUP BY 1
+    UNION
+    SELECT  evt_block_time,
+            SUM(-value/1e18) as aave
+    FROM erc20."ERC20_evt_Transfer" e
+    WHERE e.contract_address = '\x4da27a545c0c5b758a6ba100e3a049001de870f5'
+        AND e.to = '\x0000000000000000000000000000000000000000'
+    GROUP BY 1
+), 
+
+stakes AS (
+SELECT  date_trunc('day', txns.evt_block_time) as day,
+        sum(SUM(aave)) over (order by date_trunc('day', txns.evt_block_time)) as cumulative_staked
+FROM txns
+GROUP BY 1
+ORDER BY 1 asc
+),
+
+Today_apr AS (
+SELECT 
+    {{Emission per day}} / cumulative_staked AS apy_now
+FROM stakes 
+WHERE day = date_trunc('day', now())
+),
+
+-------------------------------------------
+
+time_series AS (
+    SELECT *
+    FROM generate_series(now()::TIMESTAMP, DATE_TRUNC('day',now()) + '{{Number of days for staking}} days'::INTERVAL, '1 day')
+),
+
+Row_day_num AS (
+SELECT
+    ROW_NUMBER() OVER (ORDER BY generate_series) AS RowNumber
+FROM time_series
+)
+
+SELECT
+    RowNumber,
+    apy_now*365*100 as apy,
+    ({{Initial AAVE capital}} * POW ((1 + apy_now), RowNumber)) as Total_AAVE_staked_APY,
+    {{Initial AAVE capital}}*apy_now*RowNumber + {{Initial AAVE capital}} as Total_AAVE_staked_APR
+FROM Today_apr
+CROSS JOIN Row_day_num
+--GROUP BY RowNumber
+ORDER BY RowNumber desc

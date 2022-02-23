@@ -1,0 +1,38 @@
+WITH borrows AS 
+(
+SELECT
+evt_block_time,
+t.symbol as token,
+CASE WHEN reserve = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE reserve END as contract_address,
+sum("amount"/10^decimals) as amount
+FROM aave_v2."LendingPool_evt_Borrow" borrows
+LEFT JOIN erc20."tokens" t ON borrows."reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+,
+
+p AS 
+(
+SELECT
+* 
+FROM prices.usd
+),
+
+temp AS (
+SELECT 
+evt_block_time, 
+token,
+amount*price As USDvalue
+from borrows
+LEFT JOIN p ON borrows.evt_block_time = p.minute
+AND p.contract_address = borrows.contract_address
+ORDER BY evt_block_time desc 
+)
+
+SELECT
+    extract(ISODOW from evt_block_time) as Day_of_Week,
+    token,
+    sum(USDvalue) as volume
+FROM temp
+GROUP BY 1,2

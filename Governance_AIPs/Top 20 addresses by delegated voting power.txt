@@ -1,0 +1,7 @@
+SELECT 
+"voter" AS Voter,
+sum("votingPower"/1e18) AS  delegated_voting_power
+FROM aave."AaveGovernanceV2_evt_VoteEmitted"
+GROUP BY Voter
+ORDER BY delegated_voting_power desc
+LIMIT 20

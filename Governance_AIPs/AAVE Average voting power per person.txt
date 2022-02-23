@@ -1,0 +1,46 @@
+SELECT 
+--"id" AS AIP,
+CASE 
+    WHEN "id" = '37' THEN '33.2'
+    WHEN "id" = '36' THEN '35.2'
+    WHEN "id" = '35' THEN '33.1'
+    WHEN "id" = '34' THEN '37'
+    WHEN "id" = '33' THEN '36'
+    WHEN "id" = '32' THEN '35.1'
+    WHEN "id" = '31' THEN '29'
+    WHEN "id" = '30' THEN '34'
+    WHEN "id" = '29' THEN '28'
+    WHEN "id" = '28' THEN '32'
+    WHEN "id" = '27' THEN '31'
+    WHEN "id" = '26' THEN '30'
+    WHEN "id" = '24' THEN '27'
+    WHEN "id" = '23' THEN '26'
+    WHEN "id" = '22' THEN '23'
+    WHEN "id" = '21' THEN '25'
+    WHEN "id" = '19' THEN '24'
+    WHEN "id" = '18' THEN '12'
+    WHEN "id" = '17' THEN '22'
+    WHEN "id" = '16' THEN '21'
+    WHEN "id" = '15' THEN '20'
+    WHEN "id" = '14' THEN '18'
+    WHEN "id" = '13' THEN '17'
+    WHEN "id" = '12' THEN '19'
+    WHEN "id" = '11' THEN '16'
+    WHEN "id" = '10' THEN '15'
+    WHEN "id" = '9' THEN '14'
+    WHEN "id" = '8' THEN '13'
+    WHEN "id" = '7' THEN '11.2'
+    WHEN "id" = '6' THEN '11.1'
+    WHEN "id" = '5' THEN '10'
+    WHEN "id" = '4' THEN '9'
+    WHEN "id" = '3' THEN '8'
+    WHEN "id" = '2' THEN '7'
+    WHEN "id" = '1' THEN '6'
+    WHEN "id" = '0' THEN '5'
+    else "id"
+  END as AIP,
+count("voter") AS Voter,
+sum("votingPower") / 1e18 as votingPower,
+sum("votingPower") / 1e18 / count("voter") AS votingPower_per_voiter
+FROM aave."AaveGovernanceV2_evt_VoteEmitted"
+GROUP BY AIP

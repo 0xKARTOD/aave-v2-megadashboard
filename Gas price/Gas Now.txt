@@ -1,0 +1,9 @@
+SELECT 
+date_trunc('{{Time interval}}', block_time) as time, 
+AVG(gas_price)/1000000000 as avg_gas_price
+
+
+FROM ethereum."transactions"
+WHERE block_time > DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1
+Order by 1 desc

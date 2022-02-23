@@ -1,0 +1,13 @@
+Select 
+date_trunc('day', evt_block_time) as day,
+symbol,
+(amount/10^decimals) as amount,
+("borrowRate"/10^27) as rate,
+CASE WHEN "borrowRateMode"='2' THEN 'variable'
+     WHEN "borrowRateMode"='1' THEN 'stable' 
+END
+from aave_v2."LendingPool_evt_Borrow"
+left join erc20.tokens on erc20.tokens.contract_address = reserve
+where symbol = '{{Token Symbol}}'
+AND "evt_block_time" > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+order by "evt_block_time" desc

@@ -1,0 +1,145 @@
+WITH erc20tmp AS
+(
+select *,
+symbol as symbol1
+from erc20."tokens"
+),
+
+
+d AS
+(
+select 
+date_trunc('day', evt_block_time) as day,
+sum("amount") as amt,
+"reserve"
+from aave_v2."LendingPool_evt_Deposit"
+--where evt_block_time > '2020-03-01'::date 
+group by 1, 3
+),
+
+r AS
+(
+select 
+date_trunc('day', evt_block_time) as day,
+sum("amount") as amt,
+"reserve"
+from aave_v2."LendingPool_evt_Withdraw"
+--where evt_block_time > '2020-03-01'::date 
+group by 1, 3
+),
+
+supply AS
+(
+select
+day,
+token,
+sum(net."amt") as amt,
+sum(sum(amt)) over (partition by token order by day)*avg(p.price) as outstanding
+from
+(
+select 
+d.day,
+sum(d.amt/10^decimals) as amt,
+t.symbol1 as token
+from d
+LEFT JOIN erc20tmp t ON d."reserve" = t.contract_address
+group by 1,3
+union
+select 
+r.day,
+sum(-r.amt/10^decimals) as amt,
+t.symbol1 as token
+from r
+LEFT JOIN erc20tmp t ON r."reserve" = t.contract_address
+group by 1,3
+) net
+left join prices.usd p ON net.day = p.minute
+WHERE p.symbol = net.token
+GROUP BY 1,2
+),
+
+s1 AS
+(
+select
+day,
+token,
+sum(amt) as amt,
+sum(outstanding) as total_supply
+FROM supply
+GROUP BY 1,2
+),
+
+b AS
+(
+select 
+date_trunc('day', evt_block_time) as day,
+sum("amount") as amt,
+"reserve"
+from aave_v2."LendingPool_evt_Borrow"
+--where evt_block_time > '2020-03-01'::date 
+group by 1, 3
+),
+
+r2 AS
+(
+select 
+date_trunc('day', evt_block_time) as day,
+sum("amount") as amt,
+"reserve"
+from aave_v2."LendingPool_evt_Repay"
+--where evt_block_time > '2020-03-01'::date 
+group by 1, 3
+),
+
+borrow AS
+(
+select
+day,
+token,
+sum(amt) as amt,
+sum(sum(amt)) over (partition by token order by day)*avg(p.price) as outstanding
+from
+(
+select 
+b.day,
+sum(b.amt/10^decimals) as amt,
+t.symbol1 as token
+from b
+LEFT JOIN erc20tmp t ON b."reserve" = t.contract_address
+group by 1,3
+union
+select 
+r2.day,
+sum(-r2.amt/10^decimals) as amt,
+t.symbol1 as token
+from r2
+LEFT JOIN erc20tmp t ON r2."reserve" = t.contract_address
+group by 1,3
+) net
+left join prices.usd p ON net.day = p.minute
+WHERE p.symbol = net.token
+GROUP BY 1,2
+),
+
+b1 AS
+( 
+select
+day,
+token,
+sum(amt) as amt,
+sum(outstanding) as total_debt
+FROM borrow
+GROUP BY 1,2
+)
+
+select 
+s1.day,
+s1.token,
+s1.total_supply as total_supply,
+sum(b1.total_debt) as total_debt,
+s1.total_supply - sum(b1.total_debt) as locked_value,
+sum(b1.total_debt)/s1.total_supply as utilisation
+from s1
+left join b1 on s1.day = b1.day and s1.token = b1.token
+group by 1,2,3
+order by 1 desc

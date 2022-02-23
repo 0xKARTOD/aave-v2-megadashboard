@@ -1,0 +1,9 @@
+SELECT
+    date_trunc('{{Time interval}}', minute) as time, 
+    symbol,
+    AVG(price) as prices
+FROM prices."usd"
+WHERE symbol in ('AAVE', 'COMP', 'MKR')
+AND minute >= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+GROUP BY symbol, time
+ORDER BY time desc

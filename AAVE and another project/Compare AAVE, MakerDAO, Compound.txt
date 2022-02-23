@@ -1,0 +1,54 @@
+WITH borrows AS (
+    
+    SELECT  day,
+            project,
+            token_symbol,
+            token_address, 
+            sum(amount) AS amount -- Net borrow per day
+    FROM
+    
+    (
+        SELECT  date_trunc('day', block_time) AS day,
+                project,
+                asset_address AS token_address,
+                asset_symbol AS token_symbol,
+                token_amount AS amount
+        FROM lending."borrow"
+        
+        UNION ALL
+        
+        SELECT  date_trunc('day', block_time) AS day,
+                project,
+                asset_address AS token_address,
+                asset_symbol AS token_symbol,
+                -token_amount AS amount
+        FROM lending."repay"
+    ) b
+   GROUP BY 1, 2, 3, 4
+   )
+
+, outstanding_token_amount AS (
+    SELECT  day,
+            project,
+            token_address,
+            SUM(amount) OVER (PARTITION BY project, token_address ORDER BY day) AS outstanding
+    FROM borrows
+    )
+    
+, usd_prices AS (
+    SELECT  date_trunc('day', minute) AS day,
+            contract_address AS token_address,
+            AVG(price) AS price
+    FROM prices.usd 
+    WHERE contract_address IN (SELECT token_address FROM outstanding_token_amount)
+    AND minute > now() - interval '12 months'
+    GROUP BY 1,2
+)
+    
+SELECT  b.day,
+        project,
+        SUM(outstanding*p.price) AS outstanding_usd_value
+FROM outstanding_token_amount b
+LEFT JOIN usd_prices p ON p.day = b.day AND p.token_address = b.token_address
+WHERE b.day >= now() - interval '{{Trading Num Days}} days'
+GROUP BY 1, 2;

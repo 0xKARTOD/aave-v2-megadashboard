@@ -1,0 +1,49 @@
+-- reconcile with https://etherscan.io/token/0x4da27a545c0c5b758a6ba100e3a049001de870f5
+-- with slight delay
+
+WITH erc20_transfer AS (
+    SELECT 
+    evt_tx_hash,
+    evt_block_time,
+    tr."from" AS address,
+    -tr.value AS amount,
+    contract_address
+    FROM erc20."ERC20_evt_Transfer" tr
+
+    UNION ALL
+
+    SELECT 
+    evt_tx_hash,
+    evt_block_time,
+    tr."to" AS address,
+    tr.value AS amount,
+    contract_address
+    FROM erc20."ERC20_evt_Transfer" tr
+    ), 
+
+staked_aave AS (
+    SELECT
+        evt_tx_hash,
+        evt_block_time,
+        address,
+        amount as balance,
+        contract_address  -- contract_address needed to join with erc20.tokens table
+    FROM erc20_transfer
+    WHERE address = '\x4da27a545c0c5B758a6BA100e3a049001de870f5' -- Staked Aave (stkAAVE)
+    ORDER BY evt_block_time DESC
+),
+
+sum_staked_aave AS (
+SELECT 
+    evt_block_time,
+    address,
+    balance/1e18 AS balance,
+    tok.symbol AS token,
+    evt_tx_hash
+FROM staked_aave sa
+LEFT JOIN erc20.tokens tok ON sa.contract_address = tok.contract_address
+)
+
+SELECT
+    SUM(balance) AS total_aave_staked
+FROM sum_staked_aave

@@ -1,0 +1,63 @@
+WITH liquidations AS 
+(
+SELECT
+    "user" AS "user",
+    date_trunc('day', evt_block_time) as day,
+    t.symbol as token,
+    CASE 
+        WHEN "collateralAsset" = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
+        WHEN "collateralAsset" = '\x8798249c2e607446efb7ad49ec89dd1865ff4272' THEN '\x6b3595068778dd592e39a122f4f5a5cf09c90fe2' 
+        ELSE "collateralAsset" 
+    END as contract_address,
+    --liquidations."collateralAsset" as contract_address,
+    sum(liquidations."liquidatedCollateralAmount"/10^decimals) as amount
+FROM aave_v2."LendingPool_evt_LiquidationCall" liquidations 
+LEFT JOIN erc20."tokens" t ON liquidations."collateralAsset" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3,4
+)
+,
+
+p AS 
+(
+SELECT
+* 
+FROM prices.usd
+),
+
+-------------------------------------
+DB AS ( 
+SELECT 
+    date_trunc('day', "call_block_time") as day,
+    aave."user",
+     "output_totalDebtETH"/ "output_totalCollateralETH"*100 AS "TCR"
+FROM aave_v2."LendingPool_call_getUserAccountData" aave
+LEFT JOIN liquidations t ON t."user" = aave."user"
+WHERE "output_totalCollateralETH"<>0
+),
+----------------------------------------------------------
+
+TCR_per_user AS (
+    SELECT
+        "user",
+        avg("TCR") AS "TCR"
+    FROM DB 
+    WHERE day IN (SELECT max(day) OVER (PARTITION BY "user") FROM DB)
+    GROUP BY "user"
+)
+
+SELECT 
+    FLOOR("TCR"),
+    sum(amount)*AVG(price) As USDvalue
+
+from liquidations
+
+LEFT JOIN p ON liquidations.day = p.minute
+AND p.contract_address = liquidations.contract_address
+
+
+LEFT JOIN TCR_per_user D ON D."user" = liquidations."user"
+WHERE "TCR">0
+
+GROUP BY 1
+ORDER BY 1 desc

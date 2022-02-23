@@ -1,0 +1,24 @@
+WITH flashloans AS 
+(
+SELECT
+"initiator" AS initiator,
+t.symbol as token,
+CASE WHEN asset = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE asset END as contract_address,
+sum("amount"/10^decimals) as amount
+FROM aave_v2."LendingPool_evt_FlashLoan" flashloans
+LEFT JOIN erc20."tokens" t ON flashloans."asset" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+
+SELECT 
+initiator, 
+token,
+sum(amount) As USDvalue
+from flashloans
+WHERE token = '{{Token symbol V2}}'
+
+Group by 1,2
+ORDER BY USDvalue desc
+
+LIMIT 10

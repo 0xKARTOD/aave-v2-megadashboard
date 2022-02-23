@@ -1,0 +1,41 @@
+WITH txns AS (
+    SELECT  evt_block_time,
+            SUM(value/1e18) as aave
+    FROM erc20."ERC20_evt_Transfer" f
+    WHERE f.contract_address = '\x4da27a545c0c5b758a6ba100e3a049001de870f5'
+        AND f.from = '\x0000000000000000000000000000000000000000'
+    GROUP BY 1
+    UNION
+    SELECT  evt_block_time,
+            SUM(-value/1e18) as aave
+    FROM erc20."ERC20_evt_Transfer" e
+    WHERE e.contract_address = '\x4da27a545c0c5b758a6ba100e3a049001de870f5'
+        AND e.to = '\x0000000000000000000000000000000000000000'
+    GROUP BY 1
+), 
+
+prices AS (
+    SELECT date_trunc('day', minute) as dt, 
+        symbol, 
+        avg(price) as price 
+    FROM prices."usd"
+    WHERE symbol = 'AAVE'
+    GROUP BY 1, 2
+    ORDER BY 1 DESC
+),
+
+-- SELECT aave as net_staked
+-- from txns
+stakes AS (SELECT  date_trunc('day', txns.evt_block_time) as day,
+        SUM(aave) as net_staked,
+        sum(SUM(aave)) over (order by date_trunc('day', txns.evt_block_time)) as cumulative_staked,
+        p.price as aave_price
+FROM txns
+LEFT JOIN prices p ON p.dt = date_trunc('day', txns.evt_block_time)
+GROUP BY 1, 4
+ORDER BY 1 asc)
+
+SELECT 
+    day, net_staked, cumulative_staked, 365 * {{Emission per day}} / cumulative_staked AS apy, aave_price, aave_price * {{Emission per day}} as aave_reward, 365*100 * {{Emission per day}} / cumulative_staked AS apy_now
+    FROM stakes 
+    ORDER BY day desc

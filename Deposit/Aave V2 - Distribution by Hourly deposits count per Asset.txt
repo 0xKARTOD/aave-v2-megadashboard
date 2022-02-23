@@ -1,0 +1,18 @@
+WITH deposits AS 
+(
+SELECT
+evt_block_time,
+t.symbol as token,
+count("evt_tx_hash") as evt_tx
+FROM aave_v2."LendingPool_evt_Deposit" deposits
+LEFT JOIN erc20."tokens" t ON deposits."reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+group by 1,2
+)
+
+SELECT
+    date_part('hour', evt_block_time) AS hour,
+    token,
+    sum(evt_tx) as tx_count
+FROM deposits
+GROUP BY 1,2

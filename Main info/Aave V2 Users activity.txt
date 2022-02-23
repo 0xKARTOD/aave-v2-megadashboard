@@ -1,0 +1,20 @@
+SELECT
+date_trunc('{{Time interval}}',evt_block_time) as dt,
+count(distinct "user") as activer_users,
+'deposit' as account FROM aave_v2."LendingPool_evt_Deposit"
+where evt_block_time>= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+group by date_trunc('{{Time interval}}',evt_block_time)
+union
+select 
+date_trunc('{{Time interval}}',evt_block_time) as dt,
+count(distinct "user") as active_users,
+'borrow' as account FROM aave_v2."LendingPool_evt_Borrow"
+where evt_block_time>= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+group by date_trunc('{{Time interval}}',evt_block_time)
+union 
+select 
+date_trunc('{{Time interval}}',evt_block_time) as dt,
+count(distinct "target") as active_users,
+'flashloan' as account FROM aave_v2."LendingPool_evt_FlashLoan"
+where evt_block_time>= DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+group by date_trunc('{{Time interval}}',evt_block_time)

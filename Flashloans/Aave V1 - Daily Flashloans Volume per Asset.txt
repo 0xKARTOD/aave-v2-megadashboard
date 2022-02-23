@@ -1,0 +1,32 @@
+WITH flashloans AS 
+(
+SELECT
+date_trunc('day', evt_block_time) as day,
+t.symbol as token,
+CASE WHEN _reserve = '\xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' THEN '\xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' ELSE _reserve END as contract_address,
+sum("_amount"/10^decimals) as amount
+FROM aave."LendingPool_evt_FlashLoan" flashloans
+LEFT JOIN erc20."tokens" t ON flashloans."_reserve" = t.contract_address
+WHERE evt_block_time > DATE_TRUNC('day',now()) - interval '{{Trading Num Days}} days'
+GROUP BY 1,2,3
+)
+,
+
+p AS 
+(
+SELECT
+* 
+FROM prices.usd
+)
+
+SELECT 
+day, 
+token,
+amount,
+price,
+amount*price As USDvalue,
+amount*price*9/10000 As USDvalue_fee
+from flashloans
+LEFT JOIN p ON flashloans.day = p.minute
+AND p.contract_address = flashloans.contract_address
+ORDER BY day desc

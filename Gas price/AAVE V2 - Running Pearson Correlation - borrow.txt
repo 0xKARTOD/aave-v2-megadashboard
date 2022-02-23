@@ -1,0 +1,35 @@
+WITH borrows AS 
+(
+SELECT
+date_trunc('{{Time interval}}', evt_block_time) as day,
+"evt_tx_hash"
+FROM aave_v2."LendingPool_evt_Borrow" borrows
+WHERE evt_block_time > DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+),
+
+Gas_price AS (
+SELECT 
+    date_trunc('{{Time interval}}', block_time) as day,
+    "hash" as tx_hash, 
+    gas_price/1000000000 as gas_prices
+FROM ethereum."transactions"
+WHERE block_time > DATE_TRUNC('{{Time interval}}',now()) - interval '{{Trading Num Days}} days'
+),
+
+Total AS (
+SELECT 
+a.day,
+avg(gas_prices) as avg_gas_prices,
+count("evt_tx_hash") as tx_count
+
+from borrows a
+LEFT JOIN Gas_price ON Gas_price.tx_hash = a."evt_tx_hash" and Gas_price.day = a.day
+GROUP BY a.day
+)
+
+
+SELECT 
+day,
+CORR(avg_gas_prices,tx_count) OVER (ORDER BY day) AS "Running Pearson Correlation"
+
+FROM Total
